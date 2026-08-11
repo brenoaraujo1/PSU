@@ -1,0 +1,93 @@
+version: '3.8'
+
+networks:
+  security-net:
+    driver: bridge
+
+services:
+  # 1. Banco de Dados Central
+  postgres:
+    image: postgres:15-alpine
+    container_name: security-db
+    environment:
+      POSTGRES_DB: security_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: YourSecurePassword
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - security-net
+
+  # 2. Redis (Fila de tarefas para o Celery)
+  redis:
+    image: redis:7-alpine
+    container_name: security-redis
+    networks:
+      - security-net
+
+  # 3. Sua Aplicação Django Customizada (O Painel do Zero)
+  web-portal:
+    build: ./portal-web # Diretório onde ficará o seu Dockerfile com Django
+    container_name: security-portal
+    command: python manage.py runserver 0.0.0.0:8000
+    volumes:
+      - ./portal-web:/app
+    ports:
+      - "8000:8000"
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - DB_HOST=postgres
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - security-net
+
+  # 4. Celery Worker (Executa Nmap, Gobuster e Nuclei em segundo plano)
+  celery-worker:
+    build: ./portal-web # Usa a mesma imagem do Django para ter acesso aos scripts
+    container_name: security-worker
+    command: celery -A portal_web worker --loglevel=info
+    volumes:
+      - ./portal-web:/app
+    depends_on:
+      - redis
+    networks:
+      - security-net
+
+  # 5. DefectDojo (Gestão e API de Vulnerabilidades)
+  defectdojo:
+    image: defectdojo/defectdojo-django:latest
+    container_name: defectdojo
+    ports:
+      - "8080:8080"
+    depends_on:
+      - postgres
+    networks:
+      - security-net
+
+  # 6. Prometheus (Coletor de métricas do servidor)
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+    networks:
+      - security-net
+
+  # 7. Grafana (Dashboard que será embutido no Django)
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ALLOW_EMBEDDING=true # Permite embutir os painéis na sua interface Django
+      - GF_AUTH_ANONYMOUS_ENABLED=true # Opcional: facilita visualização interna sem login repetido
+    networks:
+      - security-net
+
+volumes:
+  pgdata:
