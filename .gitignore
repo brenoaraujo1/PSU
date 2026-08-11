@@ -1,0 +1,14 @@
+# Ignorar variáveis de ambiente 
+.env
+
+# Ignorar pastas de banco de dados criadas pelos volumes do Docker
+pgdata/
+redisdata/
+prometheusdata/
+grafanadata/
+
+# Ignorar arquivos do Python e Django
+__pycache__/
+*.pyc
+portal-web/venv/
+portal-web/db.sqlite3
