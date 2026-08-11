@@ -1,13 +1,10 @@
 ##Docker Compose para o Painel de Segurança Personalizado Administração Pública MT
 
-version: '3.8'
-
 networks:
   security-net:
     driver: bridge
 
 services:
-  # 1. Banco de Dados Central
   postgres:
     image: postgres:15-alpine
     container_name: security-db
@@ -17,19 +14,29 @@ services:
       POSTGRES_PASSWORD: YourSecurePassword
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
     networks:
       - security-net
 
-  # 2. Redis (Fila de tarefas para o Celery)
   redis:
     image: redis:7-alpine
     container_name: security-redis
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
     networks:
       - security-net
 
-  # 3. Sua Aplicação Django Customizada (O Painel do Zero)
   web-portal:
-    build: ./portal-web # Diretório onde ficará o seu Dockerfile com Django
+    build: ./portal-web
     container_name: security-portal
     command: python manage.py runserver 0.0.0.0:8000
     volumes:
@@ -39,57 +46,76 @@ services:
     environment:
       - REDIS_URL=redis://redis:6379/0
       - DB_HOST=postgres
+      - DB_NAME=security_db
+      - DB_USER=postgres
+      - DB_PASSWORD=YourSecurePassword
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     networks:
       - security-net
 
-  # 4. Celery Worker (Executa Nmap, Gobuster e Nuclei em segundo plano)
   celery-worker:
-    build: ./portal-web # Usa a mesma imagem do Django para ter acesso aos scripts
+    build: ./portal-web
     container_name: security-worker
     command: celery -A portal_web worker --loglevel=info
     volumes:
       - ./portal-web:/app
+    cap_add:
+      - NET_RAW
+      - NET_ADMIN
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - DB_HOST=postgres
     depends_on:
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     networks:
       - security-net
 
-  # 5. DefectDojo (Gestão e API de Vulnerabilidades)
   defectdojo:
     image: defectdojo/defectdojo-django:latest
     container_name: defectdojo
     ports:
       - "8080:8080"
+    environment:
+      - DD_DATABASE_URL=postgres://postgres:YourSecurePassword@postgres:5432/security_db
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
     networks:
       - security-net
 
-  # 6. Prometheus (Coletor de métricas do servidor)
   prometheus:
     image: prom/prometheus:latest
     container_name: prometheus
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheusdata:/prometheus
     ports:
       - "9090:9090"
     networks:
       - security-net
 
-  # 7. Grafana (Dashboard que será embutido no Django)
   grafana:
     image: grafana/grafana:latest
     container_name: grafana
     ports:
       - "3000:3000"
     environment:
-      - GF_SECURITY_ALLOW_EMBEDDING=true # Permite embutir os painéis na sua interface Django
-      - GF_AUTH_ANONYMOUS_ENABLED=true # Opcional: facilita visualização interna sem login repetido
+      - GF_SECURITY_ALLOW_EMBEDDING=true
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+    volumes:
+      - grafanadata:/var/lib/grafana
     networks:
       - security-net
 
 volumes:
   pgdata:
+  redisdata:
+  prometheusdata:
+  grafanadata:
