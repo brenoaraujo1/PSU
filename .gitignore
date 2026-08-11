@@ -1,5 +1,6 @@
 # Ignorar variáveis de ambiente 
 .env
+docker/.env
 
 # Ignorar pastas de banco de dados criadas pelos volumes do Docker
 pgdata/
