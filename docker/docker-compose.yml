@@ -39,11 +39,11 @@ services:
 
   # 3. Aplicação Django Customizada (Web Portal)
   web-portal:
-    build: ./portal-web
+    build: ../portal-web
     container_name: security-portal
     command: python manage.py runserver 0.0.0.0:8000
     volumes:
-      - ./portal-web:/app
+      - ../portal-web:/app
     ports:
       - "8000:8000"
     environment:
@@ -62,11 +62,11 @@ services:
 
   # 4. Celery Worker (Executa Nmap, Gobuster e Nuclei em segundo plano)
   celery-worker:
-    build: ./portal-web
+    build: ../portal-web
     container_name: security-worker
     command: celery -A portal_web worker --loglevel=info
     volumes:
-      - ./portal-web:/app
+      - ../portal-web:/app
     cap_add:
       - NET_RAW
       - NET_ADMIN
@@ -103,7 +103,7 @@ services:
     image: prom/prometheus:latest
     container_name: prometheus
     volumes:
-      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
       - prometheusdata:/prometheus
     ports:
       - "9090:9090"
