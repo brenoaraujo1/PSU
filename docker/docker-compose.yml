@@ -89,7 +89,7 @@ services:
     image: defectdojo/defectdojo-django:latest
     container_name: defectdojo
     ports:
-      - "8080:8080"
+      - "8080:8081" # Alterado de 8080:8080 para 8080:8081
     environment:
       - DD_DATABASE_URL=postgres://${POSTGRES_USER}:${DB_PASSWORD}@postgres:5432/${POSTGRES_DB}
     depends_on:
