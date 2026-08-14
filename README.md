@@ -1,6 +1,6 @@
 # Plataforma de Segurança Unificada (PSU) - Setup Inicial e Infraestrutura
 
-Documentação técnica do setup inicial da **Plataforma de Segurança Unificada (PSU)**. A solução combina uma aplicação web em Django com orquestração em contêineres Docker para execução assíncrona de scans de segurança (Nmap/Nuclei) e gestão defensiva. (sujeito a mudanças)
+**Plataforma de Segurança Unificada (PSU)**. A solução combina uma aplicação web em Django com orquestração em contêineres Docker para execução assíncrona de scans de segurança (Nmap/Nuclei) e gestão defensiva. (sujeito a mudanças)
 
 ---
 
