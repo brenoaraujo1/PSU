@@ -105,6 +105,10 @@ Dentro do diretório `docker/`, execute a compilação e inicialização dos ser
 ```bash
 docker compose up -d --build
 ```
+Ou:
+```bash
+docker compose up -d web-portal celery-worker
+```
 
 ### Passo 3: Executar Migrações e Criar Superusuário
 Com os contêineres ativos, prepare a estrutura do banco de dados relacional:
