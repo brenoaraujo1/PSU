@@ -92,9 +92,22 @@ services:
       - "8080:8081" # Alterado de 8080:8080 para 8080:8081
     environment:
       - DD_DATABASE_URL=postgres://${POSTGRES_USER}:${DB_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      - DD_ALLOWED_HOSTS=*
+      - DD_UWSGI_MODE=http
+      - DD_SECRET_KEY=sua_chave_secreta_aqui_12345}
     depends_on:
       postgres:
         condition: service_healthy
+    networks:
+      - security-net
+
+defectdojo-nginx:
+    image: defectdojo/defectdojo-nginx:latest
+    container_name: defectdojo-nginx
+    ports:
+      - "8080:8080"
+    depends_on:
+      - defectdojo
     networks:
       - security-net
 
