@@ -1,4 +1,4 @@
-##Docker Compose para o Painel de Segurança Personalizado Administração Pública MT
+# Docker Compose para o Painel de Seguranca Personalizado Administracao Publica MT
 
 networks:
   security-net:
@@ -37,7 +37,7 @@ services:
     networks:
       - security-net
 
-  # 3. Aplicação Django Customizada (Web Portal)
+  # 3. Aplicacao Django Customizada (Web Portal)
   web-portal:
     build: ../portal-web
     container_name: security-portal
@@ -84,21 +84,33 @@ services:
     networks:
       - security-net
 
-  # 5. DefectDojo (Gestão e API de Vulnerabilidades)
+  # 5. DefectDojo (Gestao e API de Vulnerabilidades)
   defectdojo:
     image: defectdojo/defectdojo-django:latest
     container_name: defectdojo
-    ports:
-      - "8080:8081" # Alterado de 8080:8080 para 8080:8081
     environment:
       - DD_DATABASE_URL=postgres://${POSTGRES_USER}:${DB_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      - DD_ALLOWED_HOSTS=*
+      - DD_UWSGI_MODE=http
+      - DD_SECRET_KEY=sua_chave_secreta_aqui_12345
     depends_on:
       postgres:
         condition: service_healthy
     networks:
       - security-net
 
-  # 6. Prometheus (Coletor de métricas do servidor)
+  # Proxy Web do DefectDojo
+  defectdojo-nginx:
+    image: defectdojo/defectdojo-nginx:latest
+    container_name: defectdojo-nginx
+    ports:
+      - "8080:8080"
+    depends_on:
+      - defectdojo
+    networks:
+      - security-net
+
+  # 6. Prometheus (Coletor de metricas do servidor)
   prometheus:
     image: prom/prometheus:latest
     container_name: prometheus
@@ -106,16 +118,16 @@ services:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
       - prometheusdata:/prometheus
     ports:
-      - "9091:9090" # Alterado de 9090:9090 para 9091:9090
+      - "9091:9090"
     networks:
       - security-net
 
-  # 7. Grafana (Dashboard para integração)
+  # 7. Grafana (Dashboard para integracao)
   grafana:
     image: grafana/grafana:latest
     container_name: grafana
     ports:
-      - "3001:3000" # Alterado de 3000:3000 para 3001:3000
+      - "3001:3000"
     environment:
       - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER}
       - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}
