@@ -105,6 +105,9 @@ services:
     container_name: defectdojo-nginx
     ports:
       - "8080:8080"
+    environment:
+      - DD_UWSGI_HOST=defectdojo
+      - DD_UWSGI_PORT=3031
     depends_on:
       - defectdojo
     networks:
