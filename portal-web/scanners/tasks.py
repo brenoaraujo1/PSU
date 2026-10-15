@@ -1,6 +1,7 @@
 import subprocess
 import requests
 import os
+import json
 from celery import shared_task
 from .models import Scan
 
@@ -50,3 +51,49 @@ def upload_to_defectdojo(file_path, target):
             'auto_create_context': 'true'
         }
         requests.post(endpoint, headers=headers, data=data, files=files)
+
+@shared_task
+def run_gobuster_scan(target_url, wordlist_path="/usr/share/wordlists/dirb/common.txt"):
+    """
+    Executa enumeração de diretórios com Gobuster e retorna os caminhos encontrados.
+    """
+    cmd = [
+        "gobuster", "dir",
+        "-u", target_url,
+        "-w", wordlist_path,
+        "-q",
+        "--no-error"
+    ]
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        return {"target": target_url, "output": result.stdout}
+    except subprocess.CalledProcessError as e:
+        return {"error": e.stderr or str(e)}
+
+@shared_task
+def run_nuclei_scan(target):
+    """
+    Executa varredura de vulnerabilidades com Nuclei e gera saída estruturada em JSON.
+    """
+    output_file = f"/tmp/nuclei_{target.replace('/', '_')}.json"
+    cmd = [
+        "nuclei",
+        "-u", target,
+        "-severity", "low,medium,high,critical",
+        "-json-export", output_file,
+        "-silent"
+    ]
+    try:
+        subprocess.run(cmd, capture_output=True, text=True, check=True)
+        
+        findings = []
+        if os.path.exists(output_file):
+            with open(output_file, "r") as f:
+                for line in f:
+                    if line.strip():
+                        findings.append(json.loads(line))
+            os.remove(output_file)
+            
+        return {"target": target, "total_vulnerabilities": len(findings), "findings": findings}
+    except Exception as e:
+        return {"error": str(e)}
