@@ -5,6 +5,7 @@ RUN apt-get update && apt-get install -y \
     nmap \
     gobuster \
     wget \
+    unzip \
     git \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
