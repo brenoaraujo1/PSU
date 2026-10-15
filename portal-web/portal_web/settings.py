@@ -39,6 +39,8 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     #App Adicionado
     'scanners',
+    #Django Rest Framework
+    'rest_framework',
 ]
 
 MIDDLEWARE = [
