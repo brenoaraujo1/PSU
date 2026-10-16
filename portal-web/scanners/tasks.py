@@ -5,7 +5,7 @@ import json
 from celery import shared_task
 from .models import Scan
 
-DEFECTDOJO_URL = os.environ.get('DEFECTDOJO_URL', 'http://defectdojo:8080')
+DEFECTDOJO_URL = os.environ.get('DEFECTDOJO_URL', 'http://defectdojo-nginx:8080')
 DEFECTDOJO_API_KEY = os.environ.get('DEFECTDOJO_API_KEY', '')
 
 @shared_task
@@ -23,9 +23,8 @@ def run_nmap_scan(scan_id):
         scan.output = result.stdout
         scan.save()
 
-        # Envia para o DefectDojo se a chave de API estiver configurada
         if DEFECTDOJO_API_KEY:
-            upload_to_defectdojo(xml_file, scan.target)
+            upload_to_defectdojo(xml_file, 'Nmap Scan')
 
         return f"Scan {scan_id} concluído."
 
@@ -35,14 +34,17 @@ def run_nmap_scan(scan_id):
         scan.save()
         return f"Erro no Scan {scan_id}: {str(e)}"
 
-def upload_to_defectdojo(file_path, target):
+def upload_to_defectdojo(file_path, scan_type='Nmap Scan'):
+    if not DEFECTDOJO_API_KEY:
+        return
+
     headers = {'Authorization': f'Token {DEFECTDOJO_API_KEY}'}
     endpoint = f"{DEFECTDOJO_URL}/api/v2/import-scan/"
     
     with open(file_path, 'rb') as f:
         files = {'file': f}
         data = {
-            'scan_type': 'Nmap Scan',
+            'scan_type': scan_type,
             'active': 'true',
             'verified': 'true',
             'minimum_severity': 'Info',
@@ -50,7 +52,10 @@ def upload_to_defectdojo(file_path, target):
             'product_name': 'Portal PSU',
             'auto_create_context': 'true'
         }
-        requests.post(endpoint, headers=headers, data=data, files=files)
+        try:
+            requests.post(endpoint, headers=headers, data=data, files=files)
+        except Exception as e:
+            print(f"[!] Erro no envio ao DefectDojo: {e}")
 
 @shared_task
 def run_gobuster_scan(target_url, wordlist_path="/usr/share/wordlists/dirb/common.txt"):
@@ -75,16 +80,18 @@ def run_nuclei_scan(target):
     """
     Executa varredura de vulnerabilidades com Nuclei e gera saída estruturada em JSON.
     """
-    output_file = f"/tmp/nuclei_{target.replace('/', '_')}.json"
+    output_file = f"/tmp/nuclei_{target.replace('/', '_').replace(':', '_')}.json"
     cmd = [
         "nuclei",
         "-u", target,
         "-severity", "low,medium,high,critical",
         "-json-export", output_file,
-        "-silent"
+        "-silent",
+        "-no-interactivity"
     ]
     try:
-        subprocess.run(cmd, capture_output=True, text=True, check=True)
+        # check=False evita a exceção quando o Nuclei retorna exit code 1
+        subprocess.run(cmd, capture_output=True, text=True, check=False)
         
         findings = []
         if os.path.exists(output_file):
@@ -92,6 +99,10 @@ def run_nuclei_scan(target):
                 for line in f:
                     if line.strip():
                         findings.append(json.loads(line))
+            
+            if DEFECTDOJO_API_KEY:
+                upload_to_defectdojo(output_file, scan_type='Nuclei Scan')
+
             os.remove(output_file)
             
         return {"target": target, "total_vulnerabilities": len(findings), "findings": findings}
