@@ -52,6 +52,9 @@ services:
       - DB_NAME=${POSTGRES_DB}
       - DB_USER=${POSTGRES_USER}
       - DB_PASSWORD=${DB_PASSWORD}
+      - SECRET_KEY=${SECRET_KEY}
+      - DEBUG=${DEBUG:-0}
+      - ALLOWED_HOSTS=${ALLOWED_HOSTS:-localhost,127.0.0.1,web-portal}
     depends_on:
       postgres:
         condition: service_healthy
@@ -76,6 +79,8 @@ services:
       - DB_NAME=${POSTGRES_DB}
       - DB_USER=${POSTGRES_USER}
       - DB_PASSWORD=${DB_PASSWORD}
+      - DEFECTDOJO_URL=http://defectdojo-nginx:8080
+      - DEFECTDOJO_API_KEY=${DEFECTDOJO_API_KEY}
     depends_on:
       postgres:
         condition: service_healthy
