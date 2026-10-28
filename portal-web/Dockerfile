@@ -1,13 +1,15 @@
 FROM python:3.10-slim
 
 # Instala dependências do sistema e ferramentas de segurança
-RUN apt-get update && apt-get install -y \
-    nmap \
-    gobuster \
-    wget \
-    unzip \
-    git \
-    ca-certificates \
+# Retentativas (Acquire::Retries) toleram falhas momentâneas de DNS/rede no build.
+RUN apt-get -o Acquire::Retries=5 update \
+    && apt-get -o Acquire::Retries=5 install -y --no-install-recommends \
+       nmap \
+       gobuster \
+       wget \
+       unzip \
+       git \
+       ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 # Instalação do Nuclei (binário mais recente Go)
