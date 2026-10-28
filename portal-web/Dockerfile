@@ -4,7 +4,6 @@ FROM python:3.10-slim
 RUN apt-get update && apt-get install -y \
     nmap \
     gobuster \
-    seclists \
     wget \
     unzip \
     git \
@@ -22,6 +21,14 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
+
+# Wordlist do Gobuster (SecLists) baixada do repositório oficial.
+# O pacote apt 'seclists' não está disponível nos repositórios Debian da imagem.
+# Se a URL mudar, o build falha aqui (wget com erro) em vez de gerar uma imagem quebrada.
+RUN mkdir -p /opt/wordlists \
+    && wget -q -O /opt/wordlists/common.txt \
+       https://raw.githubusercontent.com/danielmiessler/SecLists/master/Discovery/Web-Content/common.txt
+ENV GOBUSTER_WORDLIST=/opt/wordlists/common.txt
 
 # Baixa/atualiza os templates padrão do Nuclei no build
 RUN nuclei -update-templates || true

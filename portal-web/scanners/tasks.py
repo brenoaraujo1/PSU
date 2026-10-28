@@ -10,10 +10,10 @@ from .validators import validate_target, InvalidTargetError
 DEFECTDOJO_URL = os.environ.get('DEFECTDOJO_URL', 'http://defectdojo-nginx:8080')
 DEFECTDOJO_API_KEY = os.environ.get('DEFECTDOJO_API_KEY', '')
 
-# Wordlist padrão do Gobuster (pacote apt 'seclists' instalado no Dockerfile).
+# Wordlist padrão do Gobuster (baixada no Dockerfile).
 GOBUSTER_WORDLIST = os.environ.get(
     'GOBUSTER_WORDLIST',
-    '/usr/share/seclists/Discovery/Web-Content/common.txt',
+    '/opt/wordlists/common.txt',
 )
 
 # Tempo máximo (segundos) para cada ferramenta externa não travar o worker.
