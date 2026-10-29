@@ -13,3 +13,4 @@ __pycache__/
 *.pyc
 portal-web/venv/
 portal-web/db.sqlite3
+portal-web/staticfiles/
