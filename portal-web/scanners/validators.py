@@ -32,6 +32,21 @@ def _is_valid_host(host: str) -> bool:
     return bool(_HOSTNAME_RE.match(host))
 
 
+def validate_ip_or_cidr(target: str) -> str:
+    """
+    Valida alvo para ferramentas que aceitam apenas endereços IP ou faixas CIDR
+    (ex.: Masscan). Nomes de host e URLs são rejeitados.
+    """
+    target = validate_target(target, allow_url=False)
+    try:
+        ipaddress.ip_network(target, strict=False)
+    except ValueError:
+        raise InvalidTargetError(
+            f"Alvo deve ser um IP ou faixa CIDR (ex.: 10.0.0.1 ou 10.0.0.0/24): '{target}'."
+        )
+    return target
+
+
 def validate_target(target: str, allow_url: bool = True) -> str:
     """
     Valida e normaliza o alvo.

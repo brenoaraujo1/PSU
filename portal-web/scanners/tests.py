@@ -5,7 +5,7 @@ from django.test import TestCase
 from rest_framework.test import APIClient
 
 from .models import Scan
-from .validators import InvalidTargetError, validate_target
+from .validators import InvalidTargetError, validate_ip_or_cidr, validate_target
 
 
 class ValidateTargetTests(TestCase):
@@ -42,6 +42,18 @@ class ValidateTargetTests(TestCase):
             validate_target('   ')
         with self.assertRaises(InvalidTargetError):
             validate_target('exemplo.com:99999')
+
+
+class ValidateIpOrCidrTests(TestCase):
+    def test_aceita_ip_e_cidr(self):
+        self.assertEqual(validate_ip_or_cidr('10.0.0.1'), '10.0.0.1')
+        self.assertEqual(validate_ip_or_cidr('10.0.0.0/24'), '10.0.0.0/24')
+
+    def test_rejeita_hostname_url_e_injecao(self):
+        for alvo in ['exemplo.com', 'http://10.0.0.1', '-oX /tmp/x', '10.0.0.0/99']:
+            with self.subTest(alvo=alvo):
+                with self.assertRaises(InvalidTargetError):
+                    validate_ip_or_cidr(alvo)
 
 
 class TriggerScanViewTests(TestCase):
@@ -83,6 +95,22 @@ class TriggerScanViewTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.data['status'], 'COMPLETED')
         self.assertEqual(resp.data['output'], 'ok')
+
+    @mock.patch('scanners.views.run_masscan_scan.delay')
+    def test_masscan_rejeita_hostname(self, delay):
+        resp = self.client_api.post(
+            self.url, {'scan_type': 'masscan', 'target': 'exemplo.com'}, format='json'
+        )
+        self.assertEqual(resp.status_code, 400)
+        delay.assert_not_called()
+
+    @mock.patch('scanners.views.run_masscan_scan.delay')
+    def test_masscan_aceita_cidr(self, delay):
+        delay.return_value = mock.Mock(id='m-1')
+        resp = self.client_api.post(
+            self.url, {'scan_type': 'masscan', 'target': '10.0.0.0/24'}, format='json'
+        )
+        self.assertEqual(resp.status_code, 202)
 
     def test_consulta_scan_inexistente(self):
         resp = self.client_api.get('/api/scan/999999/')

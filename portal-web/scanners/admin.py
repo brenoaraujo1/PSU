@@ -1,11 +1,12 @@
 from django.contrib import admin
 from .models import Scan
-from .tasks import run_nmap_scan, run_gobuster_scan, run_nuclei_scan
+from .tasks import run_nmap_scan, run_gobuster_scan, run_nuclei_scan, run_masscan_scan
 
 SCAN_DISPATCH = {
     'nmap': run_nmap_scan,
     'gobuster': run_gobuster_scan,
     'nuclei': run_nuclei_scan,
+    'masscan': run_masscan_scan,
 }
 
 

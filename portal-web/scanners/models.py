@@ -13,6 +13,7 @@ class Scan(models.Model):
         ('nmap', 'Nmap'),
         ('gobuster', 'Gobuster'),
         ('nuclei', 'Nuclei'),
+        ('masscan', 'Masscan'),
     ]
 
     target = models.CharField(max_length=255, help_text="IP, Domínio ou URL alvo")

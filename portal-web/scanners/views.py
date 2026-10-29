@@ -4,13 +4,14 @@ from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 
 from .models import Scan
-from .validators import validate_target, InvalidTargetError
-from .tasks import run_nmap_scan, run_gobuster_scan, run_nuclei_scan
+from .validators import validate_target, validate_ip_or_cidr, InvalidTargetError
+from .tasks import run_nmap_scan, run_gobuster_scan, run_nuclei_scan, run_masscan_scan
 
 SCAN_DISPATCH = {
     "nmap": run_nmap_scan,
     "gobuster": run_gobuster_scan,
     "nuclei": run_nuclei_scan,
+    "masscan": run_masscan_scan,
 }
 
 
@@ -35,14 +36,16 @@ class TriggerScanView(APIView):
 
         if scan_type not in SCAN_DISPATCH:
             return Response(
-                {"error": "Tipo de scan inválido. Use: nmap, gobuster ou nuclei."},
+                {"error": "Tipo de scan inválido. Use: nmap, gobuster, nuclei ou masscan."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
         # Validação de segurança (impede injeção de argumentos).
-        allow_url = scan_type != "nmap"
         try:
-            target = validate_target(target, allow_url=allow_url)
+            if scan_type == "masscan":
+                target = validate_ip_or_cidr(target)
+            else:
+                target = validate_target(target, allow_url=scan_type != "nmap")
         except InvalidTargetError as e:
             return Response(
                 {"error": f"Alvo inválido: {e}"},

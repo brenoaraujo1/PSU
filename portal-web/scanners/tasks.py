@@ -5,7 +5,7 @@ import json
 from django.utils import timezone
 from celery import shared_task
 from .models import Scan
-from .validators import validate_target, InvalidTargetError
+from .validators import validate_target, validate_ip_or_cidr, InvalidTargetError
 
 DEFECTDOJO_URL = os.environ.get('DEFECTDOJO_URL', 'http://defectdojo-nginx:8080')
 DEFECTDOJO_API_KEY = os.environ.get('DEFECTDOJO_API_KEY', '')
@@ -15,6 +15,9 @@ GOBUSTER_WORDLIST = os.environ.get(
     'GOBUSTER_WORDLIST',
     '/opt/wordlists/common.txt',
 )
+
+# Taxa de pacotes por segundo do Masscan (evita sobrecarregar a rede).
+MASSCAN_RATE = int(os.environ.get('MASSCAN_RATE', '1000'))
 
 # Tempo máximo (segundos) para cada ferramenta externa não travar o worker.
 SCAN_TIMEOUT = int(os.environ.get('SCAN_TIMEOUT', '1800'))
@@ -185,6 +188,59 @@ def run_nuclei_scan(self, scan_id):
     finally:
         if os.path.exists(output_file):
             os.remove(output_file)
+
+
+@shared_task(bind=True)
+def run_masscan_scan(self, scan_id):
+    """Varredura rápida de portas TCP com Masscan (saída XML, taxa limitada)."""
+    try:
+        scan = Scan.objects.get(id=scan_id)
+    except Scan.DoesNotExist:
+        return f"Scan {scan_id} não encontrado."
+
+    scan.status = 'RUNNING'
+    scan.task_id = self.request.id
+    scan.save(update_fields=['status', 'task_id'])
+
+    xml_file = f"/tmp/masscan_{scan_id}.xml"
+    try:
+        target = validate_ip_or_cidr(scan.target)
+        # Portas 1-1000 e taxa de 1000 pps: escopo e carga controlados.
+        cmd = [
+            "masscan", target,
+            "-p1-1000",
+            "--rate", str(MASSCAN_RATE),
+            "-oX", xml_file,
+        ]
+        result = subprocess.run(
+            cmd, capture_output=True, text=True, timeout=SCAN_TIMEOUT
+        )
+
+        output = ""
+        if os.path.exists(xml_file):
+            with open(xml_file, "r") as f:
+                output = f.read()
+        output = output or result.stdout or result.stderr
+
+        _finish(scan, 'COMPLETED', output)
+
+        if DEFECTDOJO_API_KEY and os.path.exists(xml_file):
+            upload_to_defectdojo(xml_file, 'Masscan Scan')
+
+        return f"Scan {scan_id} concluído."
+
+    except InvalidTargetError as e:
+        _finish(scan, 'FAILED', f"Alvo inválido: {e}")
+        return f"Erro no Scan {scan_id}: {e}"
+    except subprocess.TimeoutExpired:
+        _finish(scan, 'FAILED', "Tempo limite excedido.")
+        return f"Scan {scan_id} excedeu o tempo limite."
+    except Exception as e:
+        _finish(scan, 'FAILED', str(e))
+        return f"Erro no Scan {scan_id}: {e}"
+    finally:
+        if os.path.exists(xml_file):
+            os.remove(xml_file)
 
 
 def upload_to_defectdojo(file_path, scan_type='Nmap Scan'):
