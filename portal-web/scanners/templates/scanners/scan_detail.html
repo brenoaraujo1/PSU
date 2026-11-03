@@ -1,0 +1,48 @@
+{% extends "scanners/base.html" %}
+{% block title %}Scan #{{ scan.id }} - PSU{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{% url 'dashboard' %}">Scans</a></li>
+    <li class="breadcrumb-item active">Scan #{{ scan.id }}</li>
+  </ol>
+</nav>
+
+<div class="card shadow-sm mb-4">
+  <div class="card-body">
+    <div class="row g-3">
+      <div class="col-md-3"><div class="small text-muted">Ferramenta</div><div class="fw-semibold">{{ label }}</div></div>
+      <div class="col-md-5"><div class="small text-muted">Alvo</div><div class="fw-semibold text-break">{{ scan.target }}</div></div>
+      <div class="col-md-4">
+        <div class="small text-muted">Status</div>
+        {% if scan.status == 'COMPLETED' %}<span class="badge text-bg-success">Concluído</span>
+        {% elif scan.status == 'FAILED' %}<span class="badge text-bg-danger">Falhou</span>
+        {% elif scan.status == 'RUNNING' %}<span class="badge text-bg-warning">Em execução</span>
+        {% else %}<span class="badge text-bg-secondary">Pendente</span>{% endif %}
+      </div>
+      <div class="col-md-6"><div class="small text-muted">Criado em</div>{{ scan.created_at|date:"d/m/Y H:i:s" }}</div>
+      <div class="col-md-6"><div class="small text-muted">Finalizado em</div>{{ scan.finished_at|date:"d/m/Y H:i:s"|default:"-" }}</div>
+    </div>
+  </div>
+</div>
+
+<div class="card shadow-sm">
+  <div class="card-header fw-semibold">Saída</div>
+  <div class="card-body">
+    {% if scan.output %}
+      <pre class="scan-output mb-0">{{ scan.output }}</pre>
+    {% else %}
+      <p class="text-muted mb-0">Sem saída ainda. Esta página atualiza sozinha enquanto o scan estiver em andamento.</p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  {% if scan.status == 'RUNNING' or scan.status == 'PENDING' %}
+  setTimeout(() => window.location.reload(), 5000);
+  {% endif %}
+</script>
+{% endblock %}

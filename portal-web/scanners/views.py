@@ -4,23 +4,16 @@ from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 
 from .models import Scan
-from .validators import validate_target, validate_ip_or_cidr, InvalidTargetError
-from .tasks import run_nmap_scan, run_gobuster_scan, run_nuclei_scan, run_masscan_scan
-
-SCAN_DISPATCH = {
-    "nmap": run_nmap_scan,
-    "gobuster": run_gobuster_scan,
-    "nuclei": run_nuclei_scan,
-    "masscan": run_masscan_scan,
-}
+from .services import create_and_dispatch, UnknownScanTypeError
+from .validators import InvalidTargetError
 
 
 class TriggerScanView(APIView):
     """
-    Dispara scans assíncronos (Nmap, Gobuster, Nuclei).
+    Dispara scans assíncronos (Nmap, Gobuster, Nuclei, Masscan).
 
     POST /api/scan/start/
-    Body: {"scan_type": "nmap|gobuster|nuclei", "target": "<ip|dominio|url>"}
+    Body: {"scan_type": "nmap|gobuster|nuclei|masscan", "target": "<alvo>"}
     """
     permission_classes = [IsAuthenticated]
 
@@ -34,37 +27,23 @@ class TriggerScanView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        if scan_type not in SCAN_DISPATCH:
-            return Response(
-                {"error": "Tipo de scan inválido. Use: nmap, gobuster, nuclei ou masscan."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        # Validação de segurança (impede injeção de argumentos).
         try:
-            if scan_type == "masscan":
-                target = validate_ip_or_cidr(target)
-            else:
-                target = validate_target(target, allow_url=scan_type != "nmap")
+            scan, task = create_and_dispatch(scan_type, target)
+        except UnknownScanTypeError as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
         except InvalidTargetError as e:
             return Response(
                 {"error": f"Alvo inválido: {e}"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        scan = Scan.objects.create(target=target, scan_type=scan_type)
-        task = SCAN_DISPATCH[scan_type].delay(scan.id)
-
-        scan.task_id = task.id
-        scan.save(update_fields=["task_id"])
-
         return Response(
             {
                 "status": "scan_initiated",
                 "scan_id": scan.id,
                 "task_id": task.id,
-                "target": target,
-                "scan_type": scan_type,
+                "target": scan.target,
+                "scan_type": scan.scan_type,
             },
             status=status.HTTP_202_ACCEPTED,
         )
@@ -96,4 +75,3 @@ class ScanStatusView(APIView):
             },
             status=status.HTTP_200_OK,
         )
-

@@ -2,10 +2,15 @@ from unittest import mock
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
+from django.urls import reverse
 from rest_framework.test import APIClient
 
 from .models import Scan
+from .services import UnknownScanTypeError, create_and_dispatch
 from .validators import InvalidTargetError, validate_ip_or_cidr, validate_target
+
+NUCLEI_DELAY = 'scanners.tasks.run_nuclei_scan.delay'
+MASSCAN_DELAY = 'scanners.tasks.run_masscan_scan.delay'
 
 
 class ValidateTargetTests(TestCase):
@@ -56,6 +61,23 @@ class ValidateIpOrCidrTests(TestCase):
                     validate_ip_or_cidr(alvo)
 
 
+class DispatchServiceTests(TestCase):
+    def test_tipo_desconhecido_levanta_erro(self):
+        with self.assertRaises(UnknownScanTypeError):
+            create_and_dispatch('sqlmap', 'exemplo.com')
+        self.assertEqual(Scan.objects.count(), 0)
+
+    @mock.patch(NUCLEI_DELAY)
+    def test_cria_registro_e_enfileira(self, delay):
+        delay.return_value = mock.Mock(id='t-1')
+        scan, task = create_and_dispatch('nuclei', 'https://exemplo.com')
+        delay.assert_called_once_with(scan.id)
+        scan.refresh_from_db()
+        self.assertEqual(scan.task_id, 't-1')
+        self.assertEqual(task.id, 't-1')
+
+
+
 class TriggerScanViewTests(TestCase):
     def setUp(self):
         self.user = get_user_model().objects.create_user('tester', password='senha-forte-123')
@@ -76,7 +98,7 @@ class TriggerScanViewTests(TestCase):
         self.assertEqual(resp.status_code, 400)
         self.assertEqual(Scan.objects.count(), 0)
 
-    @mock.patch('scanners.views.run_nuclei_scan.delay')
+    @mock.patch(NUCLEI_DELAY)
     def test_dispara_task_com_scan_id(self, delay):
         delay.return_value = mock.Mock(id='abc-123')
         resp = self.client_api.post(
@@ -89,14 +111,7 @@ class TriggerScanViewTests(TestCase):
         self.assertEqual(resp.data['task_id'], 'abc-123')
         self.assertEqual(resp.data['status'], 'scan_initiated')
 
-    def test_consulta_status_do_scan(self):
-        scan = Scan.objects.create(target='exemplo.com', scan_type='nmap', status='COMPLETED', output='ok')
-        resp = self.client_api.get(f'/api/scan/{scan.id}/')
-        self.assertEqual(resp.status_code, 200)
-        self.assertEqual(resp.data['status'], 'COMPLETED')
-        self.assertEqual(resp.data['output'], 'ok')
-
-    @mock.patch('scanners.views.run_masscan_scan.delay')
+    @mock.patch(MASSCAN_DELAY)
     def test_masscan_rejeita_hostname(self, delay):
         resp = self.client_api.post(
             self.url, {'scan_type': 'masscan', 'target': 'exemplo.com'}, format='json'
@@ -104,7 +119,7 @@ class TriggerScanViewTests(TestCase):
         self.assertEqual(resp.status_code, 400)
         delay.assert_not_called()
 
-    @mock.patch('scanners.views.run_masscan_scan.delay')
+    @mock.patch(MASSCAN_DELAY)
     def test_masscan_aceita_cidr(self, delay):
         delay.return_value = mock.Mock(id='m-1')
         resp = self.client_api.post(
@@ -112,7 +127,55 @@ class TriggerScanViewTests(TestCase):
         )
         self.assertEqual(resp.status_code, 202)
 
+    def test_consulta_status_do_scan(self):
+        scan = Scan.objects.create(target='exemplo.com', scan_type='nmap', status='COMPLETED', output='ok')
+        resp = self.client_api.get(f'/api/scan/{scan.id}/')
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data['status'], 'COMPLETED')
+        self.assertEqual(resp.data['output'], 'ok')
+
     def test_consulta_scan_inexistente(self):
         resp = self.client_api.get('/api/scan/999999/')
         self.assertEqual(resp.status_code, 404)
 
+
+class WebPanelTests(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user('painel', password='senha-forte-123')
+        self.client.force_login(self.user)
+
+    def test_painel_exige_login(self):
+        self.client.logout()
+        resp = self.client.get(reverse('dashboard'))
+        self.assertEqual(resp.status_code, 302)
+        self.assertIn(reverse('login'), resp.url)
+
+    def test_painel_carrega_para_usuario_logado(self):
+        resp = self.client.get(reverse('dashboard'))
+        self.assertEqual(resp.status_code, 200)
+        self.assertTemplateUsed(resp, 'scanners/dashboard.html')
+        self.assertContains(resp, 'Iniciar nova varredura')
+
+    @mock.patch(NUCLEI_DELAY)
+    def test_post_cria_scan_e_redireciona_para_detalhe(self, delay):
+        delay.return_value = mock.Mock(id='w-1')
+        resp = self.client.post(reverse('dashboard'), {'scan_type': 'nuclei', 'target': 'https://exemplo.com'})
+        scan = Scan.objects.get()
+        self.assertRedirects(resp, reverse('scan_detail', args=[scan.id]))
+        delay.assert_called_once_with(scan.id)
+
+    def test_post_alvo_invalido_mostra_erro_sem_criar_scan(self):
+        resp = self.client.post(reverse('dashboard'), {'scan_type': 'nmap', 'target': '-oX /tmp/x'}, follow=True)
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, 'Alvo inválido')
+        self.assertEqual(Scan.objects.count(), 0)
+
+    def test_detalhe_mostra_saida(self):
+        scan = Scan.objects.create(target='exemplo.com', scan_type='nmap', status='COMPLETED', output='PORTA 80 open')
+        resp = self.client.get(reverse('scan_detail', args=[scan.id]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, 'PORTA 80 open')
+
+    def test_detalhe_inexistente_retorna_404(self):
+        resp = self.client.get(reverse('scan_detail', args=[999999]))
+        self.assertEqual(resp.status_code, 404)

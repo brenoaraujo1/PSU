@@ -81,6 +81,11 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'portal_web.wsgi.application'
 
+# Autenticação do painel web
+LOGIN_URL = 'login'
+LOGIN_REDIRECT_URL = 'dashboard'
+LOGOUT_REDIRECT_URL = 'login'
+
 
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases

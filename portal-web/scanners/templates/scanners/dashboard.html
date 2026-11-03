@@ -1,0 +1,93 @@
+{% extends "scanners/base.html" %}
+{% block title %}Scans - PSU{% endblock %}
+
+{% block content %}
+<div class="row g-4">
+  <div class="col-lg-4">
+    <div class="card shadow-sm">
+      <div class="card-header fw-semibold">Iniciar nova varredura</div>
+      <div class="card-body">
+        <form method="post" action="{% url 'dashboard' %}">
+          {% csrf_token %}
+          <div class="mb-3">
+            <label for="scan_type" class="form-label">Ferramenta</label>
+            <select class="form-select" id="scan_type" name="scan_type" required>
+              {% for value, label in scan_types %}
+                <option value="{{ value }}" {% if value == form_scan_type %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="mb-3">
+            <label for="target" class="form-label">Alvo</label>
+            <input type="text" class="form-control" id="target" name="target" value="{{ form_target }}"
+                   placeholder="IP, domínio ou URL" maxlength="255" required>
+            <div class="form-text" id="target-help">
+              Nmap aceita IP ou domínio. Gobuster e Nuclei aceitam também URL. Masscan aceita apenas IP ou CIDR.
+            </div>
+          </div>
+          <button type="submit" class="btn btn-primary w-100">Iniciar scan</button>
+        </form>
+        <p class="small text-muted mt-3 mb-0">Use apenas alvos para os quais você tem autorização.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-8">
+    <div class="card shadow-sm">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span class="fw-semibold">Histórico de scans</span>
+        <span class="small text-muted">Últimos {{ scans|length }}</span>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+          <thead class="table-light">
+            <tr>
+              <th>#</th><th>Ferramenta</th><th>Alvo</th><th>Status</th><th>Criado em</th><th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for scan in scans %}
+              <tr>
+                <td>{{ scan.id }}</td>
+                <td>{{ scan.get_scan_type_display }}</td>
+                <td class="text-break">{{ scan.target }}</td>
+                <td>
+                  {% if scan.status == 'COMPLETED' %}<span class="badge text-bg-success badge-status">Concluído</span>
+                  {% elif scan.status == 'FAILED' %}<span class="badge text-bg-danger badge-status">Falhou</span>
+                  {% elif scan.status == 'RUNNING' %}<span class="badge text-bg-warning badge-status">Em execução</span>
+                  {% else %}<span class="badge text-bg-secondary badge-status">Pendente</span>{% endif %}
+                </td>
+                <td class="small">{{ scan.created_at|date:"d/m/Y H:i" }}</td>
+                <td class="text-end"><a class="btn btn-outline-primary btn-sm" href="{% url 'scan_detail' scan.id %}">Ver</a></td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="6" class="text-center text-muted py-4">Nenhum scan ainda. Inicie o primeiro ao lado.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // Atualiza a página enquanto houver scans em andamento.
+  const hasActive = {{ has_active|yesno:"true,false" }};
+  if (hasActive) { setTimeout(() => window.location.reload(), 5000); }
+
+  // Ajusta a ajuda do campo alvo conforme a ferramenta escolhida.
+  const select = document.getElementById('scan_type');
+  const help = document.getElementById('target-help');
+  const hints = {
+    nmap: 'Nmap aceita IP ou domínio (sem URL).',
+    gobuster: 'Gobuster aceita domínio, IP ou URL completa (http/https).',
+    nuclei: 'Nuclei aceita domínio, IP ou URL completa (http/https).',
+    masscan: 'Masscan aceita apenas IP ou faixa CIDR (ex.: 10.0.0.0/24).'
+  };
+  const update = () => { help.textContent = hints[select.value] || ''; };
+  select.addEventListener('change', update);
+  update();
+</script>
+{% endblock %}
